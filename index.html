@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en" x-data="invoiceApp()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Generator — Bangla &amp; English</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        :root{
+            --ink:#1C2B33;
+            --paper:#FBF8F2;
+            --paper-2:#F3EEE2;
+            --brass:#B08D57;
+            --brass-dark:#8C6D3F;
+            --slate:#64707A;
+            --hairline:#E4DFD3;
+            --green:#3D7A5C;
+            --red:#B23A3A;
+        }
+        body{
+            background: var(--paper-2);
+            font-family: -apple-system, "Segoe UI", "Noto Sans Bengali", Roboto, Helvetica, Arial, sans-serif;
+            color:var(--ink);
+        }
+        .font-display{ font-family: Georgia, "Noto Serif Bengali", "Times New Roman", serif; }
+        .font-num{ font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+        .paper-sheet{
+            background: var(--paper);
+            box-shadow: 0 1px 2px rgba(28,43,51,0.04), 0 12px 32px -12px rgba(28,43,51,0.12);
+        }
+
+        /* Ticket-stub perforation for invoice number badge */
+        .stub{
+            position: relative;
+            background: var(--ink);
+            color: var(--paper);
+            clip-path: polygon(
+                0% 0%, 100% 0%, 100% 100%, 0% 100%
+            );
+        }
+        .stub::before{
+            content:"";
+            position:absolute;
+            left:-6px; top:50%;
+            width:12px; height:12px;
+            background: var(--paper-2);
+            border-radius:50%;
+            transform: translateY(-50%);
+        }
+        .perf-edge{
+            background-image: radial-gradient(circle, var(--paper-2) 3px, transparent 3.5px);
+            background-size: 14px 14px;
+            background-position: center;
+            height: 8px;
+        }
+
+        input, textarea, select { color: var(--ink); }
+        input:focus, textarea:focus, select:focus { outline: none; }
+        .field{
+            background: transparent;
+            border-bottom: 1px solid var(--hairline);
+            transition: border-color .15s ease;
+        }
+        .field:focus{ border-color: var(--ink); }
+        .field-box{
+            background: var(--paper);
+            border: 1px solid var(--hairline);
+            border-radius: 4px;
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .field-box:focus{ border-color: var(--ink); box-shadow: 0 0 0 3px rgba(28,43,51,0.06); }
+
+        select.field-box{
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: none;
+        }
+
+        .btn-ink{
+            background: var(--ink);
+            color: var(--paper);
+        }
+        .btn-ink:hover{ background:#0f191f; }
+        .btn-ghost{
+            background: var(--paper);
+            border: 1px solid var(--hairline);
+            color: var(--slate);
+        }
+        .btn-ghost:hover{ color: var(--ink); border-color: var(--ink); }
+
+        .label-eyebrow{
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--slate);
+            font-weight: 600;
+        }
+
+        ::-webkit-scrollbar{ width:8px; height:8px; }
+        ::-webkit-scrollbar-thumb{ background: var(--hairline); border-radius: 4px; }
+
+        @page {
+            size: A4;
+            margin: 10mm 12mm;
+        }
+        @media print {
+            html, body { background: white; margin:0; padding:0; }
+            .no-print { display:none !important; }
+            input, textarea, select { border:none !important; background:transparent !important; outline:none !important; padding:0 !important; }
+            .invoice-container { box-shadow:none !important; border:none !important; padding:0 !important; margin:0 !important; max-width:100% !important; }
+            .watermark-container { display:flex !important; position: static !important; margin-top: 6px; }
+            .stub::before{ background:white; }
+            /* Condense vertical rhythm for print so 12+ line items fit one A4 page */
+            .print-tight-mb-10{ margin-bottom: 10px !important; }
+            .print-tight-mb-8{ margin-bottom: 8px !important; }
+            .print-tight-mb-6{ margin-bottom: 6px !important; }
+            .print-tight-py{ padding-top: 4px !important; padding-bottom: 4px !important; }
+            .print-tight-p{ padding: 8px !important; }
+            .print-tight-pt{ padding-top: 6px !important; }
+            table thead th{ padding-top: 3px !important; padding-bottom: 3px !important; }
+            table tbody td{ padding-top: 3px !important; padding-bottom: 3px !important; }
+            .font-display.text-2xl{ font-size: 19px !important; }
+            .font-display.text-lg{ font-size: 14px !important; }
+        }
+        .watermark-container { display:none; }
+
+        [x-cloak] { display:none !important; }
+
+        .toast{
+            animation: toast-in .25s ease-out;
+        }
+        @keyframes toast-in{
+            from{ opacity:0; transform: translateY(8px); }
+            to{ opacity:1; transform: translateY(0); }
+        }
+
+        .status-dot{ width:6px; height:6px; border-radius:50%; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col" :class="lang === 'bn' ? 'bn-active' : ''">
+
+    <!-- ============ TOP BAR ============ -->
+    <div class="no-print sticky top-0 z-40 bg-[var(--paper)] border-b border-[var(--hairline)]">
+        <div class="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+            <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded stub flex items-center justify-center text-[10px] font-num font-semibold">৳</div>
+                <span class="font-display font-semibold text-sm tracking-tight" x-text="lang==='en' ? 'Invoice Ledger' : 'ইনভয়েস লেজার'"></span>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+                <!-- Language toggle -->
+                <div class="flex items-center rounded-md border border-[var(--hairline)] overflow-hidden text-[11px] font-medium">
+                    <button @click="lang='en'" :class="lang==='en' ? 'bg-[var(--ink)] text-[var(--paper)]' : 'bg-[var(--paper)] text-[var(--slate)] hover:text-[var(--ink)]'" class="px-2.5 py-1.5 transition">EN</button>
+                    <button @click="lang='bn'" :class="lang==='bn' ? 'bg-[var(--ink)] text-[var(--paper)]' : 'bg-[var(--paper)] text-[var(--slate)] hover:text-[var(--ink)]'" class="px-2.5 py-1.5 transition">বাং</button>
+                </div>
+
+                <!-- Data menu -->
+                <div class="relative" x-data="{ open:false }" @click.outside="open=false">
+                    <button @click="open=!open" class="btn-ghost px-3 py-1.5 text-[11px] font-medium rounded-md transition flex items-center gap-1">
+                        <span x-text="lang==='en' ? 'Data' : 'ডেটা'"></span>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4l3 3 3-3" stroke="currentColor" stroke-width="1.3"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak x-transition class="absolute right-0 mt-1.5 w-52 bg-[var(--paper)] border border-[var(--hairline)] rounded-md shadow-lg py-1 text-[11px] z-50">
+                        <button @click="downloadTemplateCSV(); open=false" class="w-full text-left px-3 py-2 hover:bg-[var(--paper-2)] flex items-center gap-2">
+                            <span x-text="lang==='en' ? 'Download blank template' : 'খালি টেমপ্লেট ডাউনলোড'"></span>
+                        </button>
+                        <button @click="exportCSV(); open=false" class="w-full text-left px-3 py-2 hover:bg-[var(--paper-2)] flex items-center gap-2">
+                            <span x-text="lang==='en' ? 'Export this invoice (CSV)' : 'এই ইনভয়েস এক্সপোর্ট'"></span>
+                        </button>
+                        <label class="w-full text-left px-3 py-2 hover:bg-[var(--paper-2)] flex items-center gap-2 cursor-pointer">
+                            <span x-text="lang==='en' ? 'Import CSV' : 'সিএসভি ইম্পোর্ট'"></span>
+                            <input type="file" accept=".csv" @change="importCSV" class="hidden">
+                        </label>
+                        <div class="border-t border-[var(--hairline)] my-1"></div>
+                        <button @click="duplicateInvoice(); open=false" class="w-full text-left px-3 py-2 hover:bg-[var(--paper-2)]" x-text="lang==='en' ? 'Duplicate as new invoice' : 'নতুন ইনভয়েস হিসেবে কপি'"></button>
+                        <button @click="clearItemsOnly(); open=false" class="w-full text-left px-3 py-2 hover:bg-[var(--paper-2)] text-[var(--red)]" x-text="lang==='en' ? 'Clear line items' : 'পণ্য তালিকা মুছুন'"></button>
+                    </div>
+                </div>
+
+                <button @click="openSettings = true" class="btn-ghost px-3 py-1.5 text-[11px] font-medium rounded-md transition" x-text="lang==='en' ? 'Settings' : 'সেটিংস'"></button>
+
+                <button @click="window.print()" class="btn-ink px-3.5 py-1.5 text-[11px] font-medium rounded-md transition" x-text="lang==='en' ? 'Download PDF' : 'পিডিএফ ডাউনলোড'"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ TOAST ============ -->
+    <div x-show="toast.show" x-cloak x-transition class="no-print fixed bottom-5 right-5 z-50">
+        <div class="toast bg-[var(--ink)] text-[var(--paper)] text-xs px-4 py-2.5 rounded-md shadow-lg flex items-center gap-2">
+            <span class="status-dot" :class="toast.type==='error' ? 'bg-[var(--red)]' : 'bg-[var(--green)]'"></span>
+            <span x-text="toast.msg"></span>
+        </div>
+    </div>
+
+    <!-- ============ INVOICE SHEET ============ -->
+    <div class="max-w-3xl mx-auto p-6 md:p-7 my-6 paper-sheet invoice-container flex-grow w-full rounded-sm relative">
+
+        <!-- Header -->
+        <div class="flex justify-between items-start mb-6 print-tight-mb-6 gap-6">
+            <div class="min-w-0">
+                <template x-if="settings.logo">
+                    <img :src="settings.logo" alt="Logo" class="mb-2 object-contain" :style="'height: ' + (settings.logoHeight || 48) + 'px;'">
+                </template>
+                <h1 class="font-display text-2xl font-semibold tracking-tight text-[var(--ink)]" x-text="settings.companyName || (lang === 'en' ? 'Your Company Name' : 'আপনার কোম্পানির নাম')"></h1>
+                <p class="text-xs text-[var(--slate)] whitespace-pre-line mt-1 leading-relaxed max-w-xs" x-text="settings.address"></p>
+                <p class="text-xs text-[var(--slate)] mt-0.5 font-num" x-show="settings.vat"><span x-text="lang === 'en' ? 'BIN/VAT ' : 'বিন/ভ্যাট '"></span><span x-text="settings.vat"></span></p>
+                <p class="text-xs text-[var(--slate)] mt-0.5" x-show="settings.phone" x-text="settings.phone"></p>
+            </div>
+            <div class="text-right shrink-0">
+                <h2 class="font-display text-lg font-semibold uppercase tracking-[0.15em] text-[var(--ink)] mb-1.5" x-text="lang === 'en' ? 'Invoice' : 'ইনভয়েস'"></h2>
+                <div class="inline-block stub px-3 py-1 rounded-sm mb-1.5">
+                    <span class="font-num text-xs tracking-wide" x-text="invoiceNo"></span>
+                </div>
+                <div class="text-xs text-[var(--slate)] space-y-0.5">
+                    <p class="flex items-center justify-end gap-1.5">
+                        <span x-text="lang === 'en' ? 'Date' : 'তারিখ'"></span>
+                        <input type="date" x-model="invoiceDate" class="field font-num text-right w-32 py-0.5 px-1 text-[var(--ink)]">
+                    </p>
+                    <p class="flex items-center justify-end gap-1.5">
+                        <span x-text="lang === 'en' ? 'Due' : 'বকেয়া তারিখ'"></span>
+                        <input type="date" x-model="dueDate" class="field font-num text-right w-32 py-0.5 px-1 text-[var(--ink)]">
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Billed To + Payment Status: even two-column split -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 print-tight-mb-6">
+            <div class="print-tight-p p-3 bg-[var(--paper-2)]/60 rounded-md border border-[var(--hairline)]">
+                <h3 class="label-eyebrow mb-1.5" x-text="lang === 'en' ? 'Billed To' : 'গ্রাহকের বিবরণ'"></h3>
+                <input type="text" x-model="client.name" :placeholder="lang === 'en' ? 'Client or company name' : 'গ্রাহকের নাম'" class="w-full font-medium text-sm bg-transparent field pb-1 mb-1.5">
+                <input type="text" x-model="client.address" :placeholder="lang === 'en' ? 'Client address' : 'গ্রাহকের ঠিকানা'" class="w-full text-xs text-[var(--slate)] bg-transparent field pb-1 mb-1.5">
+                <div class="flex gap-3">
+                    <input type="text" x-model="client.phone" :placeholder="lang === 'en' ? 'Phone' : 'ফোন'" class="w-1/2 text-xs text-[var(--slate)] bg-transparent field pb-1">
+                    <input type="text" x-model="client.email" :placeholder="lang === 'en' ? 'Email' : 'ইমেইল'" class="w-1/2 text-xs text-[var(--slate)] bg-transparent field pb-1">
+                </div>
+            </div>
+            <div class="print-tight-p p-3 bg-[var(--paper-2)]/60 rounded-md border border-[var(--hairline)]">
+                <h3 class="label-eyebrow mb-1.5" x-text="lang === 'en' ? 'Payment Status' : 'পেমেন্ট স্ট্যাটাস'"></h3>
+                <select x-model="paymentStatus" class="w-full field-box text-xs py-1.5 px-2 mb-2 font-medium" :class="statusColor(paymentStatus)">
+                    <option value="unpaid" x-text="lang==='en' ? 'Unpaid' : 'অপরিশোধিত'"></option>
+                    <option value="partial" x-text="lang==='en' ? 'Partially Paid' : 'আংশিক পরিশোধিত'"></option>
+                    <option value="paid" x-text="lang==='en' ? 'Paid' : 'পরিশোধিত'"></option>
+                    <option value="overdue" x-text="lang==='en' ? 'Overdue' : 'মেয়াদোত্তীর্ণ'"></option>
+                </select>
+                <h3 class="label-eyebrow mb-1" x-text="lang === 'en' ? 'Payment Method' : 'পেমেন্ট পদ্ধতি'"></h3>
+                <input type="text" x-model="paymentMethod" :placeholder="lang === 'en' ? 'e.g. bKash, Bank Transfer' : 'যেমন বিকাশ, ব্যাংক ট্রান্সফার'" class="w-full text-xs bg-transparent field pb-1">
+            </div>
+        </div>
+
+        <!-- Line items -->
+        <div class="mb-6 print-tight-mb-6">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-[var(--hairline)] text-[10px] font-semibold text-[var(--slate)] uppercase tracking-wider">
+                        <th class="py-2 px-2" x-text="lang === 'en' ? 'Item & Details' : 'পণ্যের বিবরণ'"></th>
+                        <th class="py-2 px-2 w-16 text-center" x-text="lang === 'en' ? 'Units' : 'পরিমাণ'"></th>
+                        <th class="py-2 px-2 w-24 text-right" x-text="(lang === 'en' ? 'Price' : 'মূল্য') + ' (' + settings.currency + ')'"></th>
+                        <th class="py-2 px-2 w-20 text-right" x-text="lang === 'en' ? 'Tax %' : 'ভ্যাট %'"></th>
+                        <th class="py-2 px-2 w-24 text-right" x-text="lang === 'en' ? 'Total' : 'মোট'"></th>
+                        <th class="py-2 px-1 w-8 no-print"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-[var(--hairline)]/70 text-xs">
+                    <template x-for="(item, index) in items" :key="index">
+                        <tr class="group">
+                            <td class="py-1.5 print-tight-py px-2">
+                                <input type="text" x-model="item.name" :placeholder="lang === 'en' ? 'Product or service name' : 'পণ্যের নাম'" class="w-full font-medium bg-transparent field pb-0.5">
+                                <input type="text" x-model="item.details" :placeholder="lang === 'en' ? 'Additional details…' : 'অতিরিক্ত বিবরণ...'" class="w-full text-[11px] text-[var(--slate)] bg-transparent field pb-0.5">
+                            </td>
+                            <td class="py-1.5 print-tight-py px-2 text-center align-top">
+                                <input type="number" x-model.number="item.units" min="0" step="any" class="w-14 text-center field-box font-num py-0.5">
+                            </td>
+                            <td class="py-1.5 print-tight-py px-2 text-right align-top">
+                                <input type="number" x-model.number="item.unitPrice" min="0" step="any" class="w-20 text-right field-box font-num py-0.5 px-1.5">
+                            </td>
+                            <td class="py-1.5 print-tight-py px-2 text-right align-top">
+                                <input type="number" x-model.number="item.tax" min="0" step="any" class="w-16 text-right field-box font-num py-0.5 px-1.5">
+                            </td>
+                            <td class="py-1.5 print-tight-py px-2 text-right align-top font-medium font-num" x-text="settings.currency + ' ' + calculateRowTotal(item).toFixed(2)"></td>
+                            <td class="py-1.5 print-tight-py px-1 text-center align-top no-print">
+                                <button @click="removeItem(index)" class="text-[var(--hairline)] group-hover:text-[var(--red)] transition font-bold" x-text="'×'"></button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            <div class="flex items-center gap-3 mt-2 no-print">
+                <button @click="addItem" class="text-xs font-medium text-[var(--slate)] hover:text-[var(--ink)] flex items-center gap-1 transition">
+                    <span>+</span> <span x-text="lang === 'en' ? 'Add line item' : 'পণ্য যোগ করুন'"></span>
+                </button>
+                <span class="text-[var(--hairline)]">·</span>
+                <button @click="duplicateLastItem" class="text-xs font-medium text-[var(--slate)] hover:text-[var(--ink)] transition" x-text="lang === 'en' ? 'Duplicate last row' : 'শেষ সারি কপি করুন'"></button>
+            </div>
+        </div>
+
+        <!-- Discount + Summary -->
+        <div class="flex flex-col md:flex-row justify-between gap-5 mb-4 print-tight-mb-6">
+            <div class="md:w-1/2">
+                <h3 class="label-eyebrow mb-1.5" x-text="lang === 'en' ? 'Notes' : 'নোট'"></h3>
+                <textarea x-model="notes" rows="2" :placeholder="lang==='en' ? 'Payment terms, delivery notes, thank-you message…' : 'পেমেন্ট শর্তাবলী, ডেলিভারি নোট...'" class="w-full text-xs text-[var(--slate)] bg-transparent field-box p-2 resize-none print-tight-p"></textarea>
+            </div>
+            <div class="w-full md:w-64 space-y-1.5 text-xs shrink-0">
+                <div class="flex justify-between items-center text-[var(--slate)]">
+                    <span x-text="lang === 'en' ? 'Subtotal' : 'উপমোট'"></span>
+                    <span class="font-num" x-text="settings.currency + ' ' + subtotal.toFixed(2)"></span>
+                </div>
+                <div class="flex justify-between items-center text-[var(--slate)]">
+                    <span x-text="lang === 'en' ? 'Total Tax' : 'মোট ভ্যাট'"></span>
+                    <span class="font-num" x-text="settings.currency + ' ' + totalTax.toFixed(2)"></span>
+                </div>
+                <div class="flex justify-between items-center text-[var(--slate)] gap-2">
+                    <span class="flex items-center gap-1.5 shrink-0">
+                        <span x-text="lang === 'en' ? 'Discount' : 'ছাড়'"></span>
+                        <select x-model="discountType" class="no-print field-box text-[10px] py-0.5 px-1 font-medium">
+                            <option value="flat">৳</option>
+                            <option value="percent">%</option>
+                        </select>
+                    </span>
+                    <input type="number" x-model.number="discountValue" min="0" step="any" class="w-20 text-right field-box font-num py-0.5 px-1.5">
+                </div>
+                <div class="flex justify-between items-center text-sm font-semibold border-t border-[var(--hairline)] pt-2 print-tight-pt">
+                    <span x-text="lang === 'en' ? 'Final Total' : 'সর্বমোট'"></span>
+                    <span class="font-num" x-text="settings.currency + ' ' + grandTotal.toFixed(2)"></span>
+                </div>
+                <div class="flex justify-between items-center text-[11px] text-[var(--slate)]" x-show="amountPaid > 0 || paymentStatus==='partial'">
+                    <span class="flex items-center gap-1.5">
+                        <span x-text="lang === 'en' ? 'Amount Paid' : 'প্রদত্ত পরিমাণ'"></span>
+                    </span>
+                    <input type="number" x-model.number="amountPaid" min="0" step="any" class="w-20 text-right field-box font-num py-0.5 px-1.5">
+                </div>
+                <div class="flex justify-between items-center text-[11px] font-medium text-[var(--red)]" x-show="amountPaid > 0 && (grandTotal - amountPaid) > 0">
+                    <span x-text="lang === 'en' ? 'Balance Due' : 'বকেয়া'"></span>
+                    <span class="font-num" x-text="settings.currency + ' ' + Math.max(0, grandTotal - amountPaid).toFixed(2)"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="border-t border-[var(--hairline)] pt-3 text-center text-[11px] text-[var(--slate)] whitespace-pre-line" x-text="settings.footer"></div>
+
+        <!-- Watermark -->
+        <div class="watermark-container relative mt-2 justify-center items-center space-x-2 text-[10px] text-[var(--slate)] tracking-wider">
+            <span>Created using Bangla Invoice by</span>
+            <img src="https://creo.com.bd/footer.png" alt="CREO Logo" class="h-3.5 object-contain inline-block">
+        </div>
+    </div>
+
+    <div class="perf-edge no-print max-w-3xl mx-auto w-full"></div>
+
+    <!-- ============ SETTINGS MODAL ============ -->
+    <div x-show="openSettings" x-cloak class="fixed inset-0 bg-[var(--ink)]/25 backdrop-blur-sm flex items-center justify-center p-4 z-50 no-print" @keydown.escape.window="openSettings=false">
+        <div x-show="openSettings" x-transition.scale.origin.top class="bg-[var(--paper)] border border-[var(--hairline)] rounded-lg max-w-md w-full p-6 relative max-h-[88vh] overflow-y-auto" @click.outside="openSettings=false">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-[var(--hairline)]">
+                <h3 class="font-display text-base font-semibold" x-text="lang === 'en' ? 'Company Settings' : 'কোম্পানি সেটিংস'"></h3>
+                <button @click="openSettings = false" class="text-[var(--slate)] hover:text-[var(--ink)] text-sm">✕</button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Company Name' : 'কোম্পানির নাম'"></label>
+                    <input type="text" x-model="settings.companyName" class="w-full field-box p-2">
+                </div>
+                <div>
+                    <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Company Address' : 'কোম্পানির ঠিকানা'"></label>
+                    <textarea x-model="settings.address" rows="2" class="w-full field-box p-2"></textarea>
+                </div>
+                <div class="flex gap-3">
+                    <div class="w-1/2">
+                        <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Phone' : 'ফোন'"></label>
+                        <input type="text" x-model="settings.phone" class="w-full field-box p-2">
+                    </div>
+                    <div class="w-1/2">
+                        <label class="block font-medium mb-1" x-text="lang === 'en' ? 'VAT / BIN Number' : 'ভ্যাট / বিন নম্বর'"></label>
+                        <input type="text" x-model="settings.vat" class="w-full field-box p-2">
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Currency Symbol' : 'মুদ্রা প্রতীক'"></label>
+                    <input type="text" x-model="settings.currency" placeholder="৳ / $ / BDT" class="w-full field-box p-2">
+                </div>
+
+                <div class="border-t border-[var(--hairline)] pt-3">
+                    <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Company Logo' : 'কোম্পানি লোগো'"></label>
+                    <input type="file" @change="handleFileUpload" accept="image/*" class="w-full text-[11px] mb-2 file:mr-2 file:py-1 file:px-2 file:border file:border-[var(--hairline)] file:rounded file:text-[11px] file:bg-[var(--paper-2)] file:font-medium">
+                    <input type="text" x-model="settings.logo" :placeholder="lang==='en' ? 'Or paste image URL…' : 'অথবা ছবির ইউআরএল...'" class="w-full field-box p-2 text-[11px]">
+                    <div class="mt-2">
+                        <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Logo Height (px)' : 'লোগোর উচ্চতা'"></label>
+                        <input type="number" x-model.number="settings.logoHeight" min="20" max="150" class="w-full field-box p-2">
+                    </div>
+                </div>
+
+                <div class="border-t border-[var(--hairline)] pt-3">
+                    <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Invoice Prefix' : 'ইনভয়েস প্রিফিক্স'"></label>
+                    <input type="text" x-model="settings.prefix" @input="updateInvoiceNo" placeholder="INV" class="w-full field-box p-2 mb-2">
+                    <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Invoice Number Pattern' : 'ইনভয়েস নম্বর প্যাটার্ন'"></label>
+                    <input type="text" x-model="settings.pattern" @input="updateInvoiceNo" placeholder="{PREFIX}-{YYYY}-{COUNT}" class="w-full field-box p-2 font-num text-[11px]">
+                    <p class="text-[10px] text-[var(--slate)] mt-1">Tags: {PREFIX}, {YYYY}, {MM}, {DD}, {COUNT}</p>
+                </div>
+
+                <div class="border-t border-[var(--hairline)] pt-3">
+                    <label class="block font-medium mb-1" x-text="lang === 'en' ? 'Footer Note' : 'ফুটার নোট'"></label>
+                    <textarea x-model="settings.footer" rows="2" class="w-full field-box p-2"></textarea>
+                </div>
+
+                <div class="border-t border-[var(--hairline)] pt-3">
+                    <label class="flex items-center gap-2 font-medium cursor-pointer">
+                        <input type="checkbox" x-model="settings.autoSaveDrafts" class="accent-[var(--ink)]">
+                        <span x-text="lang === 'en' ? 'Remember this invoice in browser (auto-save draft)' : 'ব্রাউজারে এই ইনভয়েস মনে রাখুন'"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-5 flex justify-end gap-2">
+                <button @click="openSettings=false" class="btn-ghost px-3.5 py-1.5 text-xs font-medium rounded-md" x-text="lang==='en' ? 'Cancel' : 'বাতিল'"></button>
+                <button @click="saveSettings" class="btn-ink px-4 py-1.5 text-xs font-medium rounded-md" x-text="lang === 'en' ? 'Save Changes' : 'সংরক্ষণ করুন'"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Application Logic -->
+    <script>
+        function invoiceApp() {
+            return {
+                lang: 'en',
+                openSettings: false,
+                invoiceNo: 'INV-2026-001',
+                invoiceDate: new Date().toISOString().split('T')[0],
+                dueDate: '',
+                notes: '',
+                paymentStatus: 'unpaid',
+                paymentMethod: '',
+                discountType: 'flat',
+                discountValue: 0,
+                amountPaid: 0,
+                toast: { show: false, msg: '', type: 'success' },
+                settings: {
+                    companyName: '',
+                    address: '',
+                    phone: '',
+                    vat: '',
+                    currency: '৳',
+                    logo: '',
+                    logoHeight: 48,
+                    prefix: 'INV',
+                    pattern: '{PREFIX}-{YYYY}-{COUNT}',
+                    footer: 'Thank you for your business! / আপনার ব্যবসার জন্য ধন্যবাদ!',
+                    autoSaveDrafts: true
+                },
+                client: { name: '', address: '', phone: '', email: '' },
+                items: [
+                    { name: '', details: '', units: 1, unitPrice: 0, tax: 0 }
+                ],
+
+                init() {
+                    const savedSettings = localStorage.getItem('invoice_shadcn_settings');
+                    if (savedSettings) {
+                        try { this.settings = { ...this.settings, ...JSON.parse(savedSettings) }; } catch(e) {}
+                    }
+                    if (this.settings.autoSaveDrafts !== false) {
+                        const draft = localStorage.getItem('invoice_draft');
+                        if (draft) {
+                            try {
+                                const d = JSON.parse(draft);
+                                this.invoiceNo = d.invoiceNo ?? this.invoiceNo;
+                                this.invoiceDate = d.invoiceDate ?? this.invoiceDate;
+                                this.dueDate = d.dueDate ?? this.dueDate;
+                                this.notes = d.notes ?? this.notes;
+                                this.paymentStatus = d.paymentStatus ?? this.paymentStatus;
+                                this.paymentMethod = d.paymentMethod ?? this.paymentMethod;
+                                this.discountType = d.discountType ?? this.discountType;
+                                this.discountValue = d.discountValue ?? this.discountValue;
+                                this.amountPaid = d.amountPaid ?? this.amountPaid;
+                                this.client = d.client ?? this.client;
+                                this.items = (d.items && d.items.length) ? d.items : this.items;
+                            } catch(e) {}
+                        }
+                    }
+                    this.updateInvoiceNo();
+                    // Watch only the fields that belong in the draft, not the whole
+                    // reactive data object (toast, getters, etc.) to avoid expensive
+                    // deep re-evaluation loops on every keystroke.
+                    ['invoiceNo','invoiceDate','dueDate','notes','paymentStatus','paymentMethod',
+                     'discountType','discountValue','amountPaid','client','items'].forEach(key => {
+                        this.$watch(key, () => this.autoSaveDraft());
+                    });
+                },
+
+                autoSaveDraft() {
+                    if (this.settings.autoSaveDrafts === false) return;
+                    clearTimeout(this._draftTimer);
+                    this._draftTimer = setTimeout(() => {
+                        const draft = {
+                            invoiceNo: this.invoiceNo, invoiceDate: this.invoiceDate, dueDate: this.dueDate,
+                            notes: this.notes, paymentStatus: this.paymentStatus, paymentMethod: this.paymentMethod,
+                            discountType: this.discountType, discountValue: this.discountValue, amountPaid: this.amountPaid,
+                            client: this.client, items: this.items
+                        };
+                        localStorage.setItem('invoice_draft', JSON.stringify(draft));
+                    }, 400);
+                },
+
+                showToast(msg, type = 'success') {
+                    this.toast = { show: true, msg, type };
+                    clearTimeout(this._toastTimer);
+                    this._toastTimer = setTimeout(() => { this.toast.show = false; }, 2600);
+                },
+
+                statusColor(status) {
+                    return {
+                        paid: 'text-[var(--green)]',
+                        overdue: 'text-[var(--red)]',
+                        partial: 'text-[var(--brass-dark)]',
+                        unpaid: 'text-[var(--slate)]'
+                    }[status] || '';
+                },
+
+                saveSettings() {
+                    localStorage.setItem('invoice_shadcn_settings', JSON.stringify(this.settings));
+                    this.openSettings = false;
+                    this.showToast(this.lang === 'en' ? 'Settings saved' : 'সেটিংস সংরক্ষিত হয়েছে');
+                },
+
+                handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => { this.settings.logo = e.target.result; };
+                        reader.readAsDataURL(file);
+                    }
+                },
+
+                updateInvoiceNo() {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    let pattern = this.settings.pattern || '{PREFIX}-{YYYY}-{COUNT}';
+                    this.invoiceNo = pattern
+                        .replace('{PREFIX}', this.settings.prefix || 'INV')
+                        .replace('{YYYY}', year)
+                        .replace('{MM}', month)
+                        .replace('{DD}', day)
+                        .replace('{COUNT}', '001');
+                },
+
+                addItem() {
+                    this.items.push({ name: '', details: '', units: 1, unitPrice: 0, tax: 0 });
+                },
+                duplicateLastItem() {
+                    if (this.items.length === 0) return this.addItem();
+                    this.items.push({ ...this.items[this.items.length - 1] });
+                },
+                removeItem(index) {
+                    if (this.items.length > 1) this.items.splice(index, 1);
+                },
+                calculateRowTotal(item) {
+                    const base = (item.units || 0) * (item.unitPrice || 0);
+                    const taxAmount = base * ((item.tax || 0) / 100);
+                    return base + taxAmount;
+                },
+                get subtotal() {
+                    return this.items.reduce((acc, item) => acc + ((item.units || 0) * (item.unitPrice || 0)), 0);
+                },
+                get totalTax() {
+                    return this.items.reduce((acc, item) => {
+                        const base = (item.units || 0) * (item.unitPrice || 0);
+                        return acc + (base * ((item.tax || 0) / 100));
+                    }, 0);
+                },
+                get discountAmount() {
+                    const base = this.subtotal + this.totalTax;
+                    if (this.discountType === 'percent') return base * ((this.discountValue || 0) / 100);
+                    return this.discountValue || 0;
+                },
+                get grandTotal() {
+                    return Math.max(0, this.subtotal + this.totalTax - this.discountAmount);
+                },
+
+                duplicateInvoice() {
+                    this.updateInvoiceNo();
+                    this.invoiceDate = new Date().toISOString().split('T')[0];
+                    this.dueDate = '';
+                    this.paymentStatus = 'unpaid';
+                    this.amountPaid = 0;
+                    this.showToast(this.lang === 'en' ? 'Ready as a new invoice' : 'নতুন ইনভয়েস প্রস্তুত');
+                },
+                clearItemsOnly() {
+                    this.items = [{ name: '', details: '', units: 1, unitPrice: 0, tax: 0 }];
+                    this.showToast(this.lang === 'en' ? 'Line items cleared' : 'পণ্য তালিকা মুছে ফেলা হয়েছে');
+                },
+
+                // ---- CSV: row-per-record layout (easy to add products as new rows) ----
+                csvEscape(val) {
+                    return String(val ?? '').replace(/"/g, '""');
+                },
+
+                exportCSV() {
+                    const rows = [];
+                    // Header block: one row per invoice-level field, using a fixed 2-column key/value shape
+                    rows.push(['field', 'value'].join(','));
+                    const meta = {
+                        invoiceNo: this.invoiceNo,
+                        invoiceDate: this.invoiceDate,
+                        dueDate: this.dueDate,
+                        paymentStatus: this.paymentStatus,
+                        paymentMethod: this.paymentMethod,
+                        amountPaid: this.amountPaid,
+                        discountType: this.discountType,
+                        discountValue: this.discountValue,
+                        notes: this.notes,
+                        companyName: this.settings.companyName,
+                        companyAddress: this.settings.address,
+                        companyPhone: this.settings.phone,
+                        companyVat: this.settings.vat,
+                        currency: this.settings.currency,
+                        footer: this.settings.footer,
+                        clientName: this.client.name,
+                        clientAddress: this.client.address,
+                        clientPhone: this.client.phone,
+                        clientEmail: this.client.email
+                    };
+                    for (const key in meta) {
+                        rows.push(`"${key}","${this.csvEscape(meta[key])}"`);
+                    }
+                    rows.push(''); // blank separator row
+                    // Items block: one row per product, columns are the item fields — easy to add rows in Excel/Sheets
+                    rows.push(['item_name', 'item_details', 'units', 'unit_price', 'tax_percent'].join(','));
+                    this.items.forEach(item => {
+                        rows.push([
+                            `"${this.csvEscape(item.name)}"`,
+                            `"${this.csvEscape(item.details)}"`,
+                            item.units ?? 0,
+                            item.unitPrice ?? 0,
+                            item.tax ?? 0
+                        ].join(','));
+                    });
+
+                    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.setAttribute('href', url);
+                    a.setAttribute('download', `${this.invoiceNo || 'invoice'}.csv`);
+                    a.click();
+                    this.showToast(this.lang === 'en' ? 'CSV exported' : 'সিএসভি এক্সপোর্ট হয়েছে');
+                },
+
+                downloadTemplateCSV() {
+                    const rows = [
+                        'field,value',
+                        '"invoiceNo","INV-2026-001"',
+                        '"invoiceDate","2026-08-17"',
+                        '"dueDate","2026-08-31"',
+                        '"paymentStatus","unpaid"',
+                        '"paymentMethod","bKash"',
+                        '"amountPaid","0"',
+                        '"discountType","flat"',
+                        '"discountValue","0"',
+                        '"notes","Payment due within 14 days"',
+                        '"companyName","My Sample Company Ltd"',
+                        '"companyAddress","123 Commercial Area, Dhaka"',
+                        '"companyPhone","+880 1XXXXXXXXX"',
+                        '"companyVat","BIN-987654321"',
+                        '"currency","৳"',
+                        '"footer","Thank you for your business!"',
+                        '"clientName","Acme Corporation"',
+                        '"clientAddress","Gulshan-2, Dhaka"',
+                        '"clientPhone","+880 1XXXXXXXXX"',
+                        '"clientEmail","billing@acme.com"',
+                        '',
+                        'item_name,item_details,units,unit_price,tax_percent',
+                        '"Consulting Services","Business strategy assessment",5,2000,5',
+                        '"Web Hosting (Annual)","Shared hosting plan",1,3500,0',
+                        '"Add another product here","",1,0,0'
+                    ];
+                    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const aTag = document.createElement('a');
+                    aTag.setAttribute('href', url);
+                    aTag.setAttribute('download', 'invoice_template.csv');
+                    aTag.click();
+                    this.showToast(this.lang === 'en' ? 'Template downloaded — add product rows and re-import' : 'টেমপ্লেট ডাউনলোড হয়েছে');
+                },
+
+                parseCSVLine(line) {
+                    // Handles quoted commas
+                    const result = [];
+                    let cur = '', inQuotes = false;
+                    for (let i = 0; i < line.length; i++) {
+                        const c = line[i];
+                        if (c === '"') {
+                            if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
+                            else inQuotes = !inQuotes;
+                        } else if (c === ',' && !inQuotes) {
+                            result.push(cur); cur = '';
+                        } else {
+                            cur += c;
+                        }
+                    }
+                    result.push(cur);
+                    return result;
+                },
+
+                importCSV(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const lines = e.target.result.split(/\r?\n/);
+                            const metaMap = {};
+                            let itemsStart = -1;
+
+                            lines.forEach((line, idx) => {
+                                if (!line.trim()) return;
+                                if (line.trim().toLowerCase().startsWith('item_name')) { itemsStart = idx; return; }
+                                if (itemsStart === -1 && !line.trim().toLowerCase().startsWith('field,value')) {
+                                    const parts = this.parseCSVLine(line);
+                                    if (parts.length >= 2) metaMap[parts[0].trim()] = parts[1];
+                                }
+                            });
+
+                            if (metaMap.invoiceNo) this.invoiceNo = metaMap.invoiceNo;
+                            if (metaMap.invoiceDate) this.invoiceDate = metaMap.invoiceDate;
+                            if (metaMap.dueDate) this.dueDate = metaMap.dueDate;
+                            if (metaMap.paymentStatus) this.paymentStatus = metaMap.paymentStatus;
+                            if (metaMap.paymentMethod) this.paymentMethod = metaMap.paymentMethod;
+                            if (metaMap.amountPaid) this.amountPaid = Number(metaMap.amountPaid) || 0;
+                            if (metaMap.discountType) this.discountType = metaMap.discountType;
+                            if (metaMap.discountValue) this.discountValue = Number(metaMap.discountValue) || 0;
+                            if (metaMap.notes) this.notes = metaMap.notes;
+                            if (metaMap.companyName) this.settings.companyName = metaMap.companyName;
+                            if (metaMap.companyAddress) this.settings.address = metaMap.companyAddress;
+                            if (metaMap.companyPhone) this.settings.phone = metaMap.companyPhone;
+                            if (metaMap.companyVat) this.settings.vat = metaMap.companyVat;
+                            if (metaMap.currency) this.settings.currency = metaMap.currency;
+                            if (metaMap.footer) this.settings.footer = metaMap.footer;
+                            if (metaMap.clientName) this.client.name = metaMap.clientName;
+                            if (metaMap.clientAddress) this.client.address = metaMap.clientAddress;
+                            if (metaMap.clientPhone) this.client.phone = metaMap.clientPhone;
+                            if (metaMap.clientEmail) this.client.email = metaMap.clientEmail;
+
+                            if (itemsStart !== -1) {
+                                const newItems = [];
+                                for (let i = itemsStart + 1; i < lines.length; i++) {
+                                    if (!lines[i].trim()) continue;
+                                    const p = this.parseCSVLine(lines[i]);
+                                    if (p.length < 1 || !p[0].trim()) continue;
+                                    newItems.push({
+                                        name: p[0] || '',
+                                        details: p[1] || '',
+                                        units: Number(p[2]) || 0,
+                                        unitPrice: Number(p[3]) || 0,
+                                        tax: Number(p[4]) || 0
+                                    });
+                                }
+                                if (newItems.length > 0) this.items = newItems;
+                            }
+
+                            this.saveSettings();
+                            this.showToast(this.lang === 'en' ? 'CSV imported successfully' : 'সিএসভি সফলভাবে ইমপোর্ট হয়েছে');
+                        } catch (err) {
+                            this.showToast(this.lang === 'en' ? 'Could not read that CSV' : 'সিএসভি পড়া যায়নি', 'error');
+                        }
+                        event.target.value = '';
+                    };
+                    reader.readAsText(file);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
